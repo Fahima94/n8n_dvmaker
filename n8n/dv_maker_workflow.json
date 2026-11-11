@@ -1,0 +1,927 @@
+{
+  "name": "DV Maker - usage perso",
+  "nodes": [
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Donnees candidat et offre:\n\n{{ $json.jsonOutput }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "Tu évalues la compatibilité entre le profil candidat et l'offre en mappant les compétences sur le référentiel ESCO, puis en évaluant leur proximité sémantique avec les exigences du poste (raisonnement type corrélation vectorielle, pas de correspondance mot-clé). Réponds fit=true si une partie significative des compétences techniques est transférable au niveau sémantique, même si le niveau hiérarchique diffère. Liste dans filtered_competences uniquement les compétences directement pertinentes, avec leur label ESCO si identifiable."
+        }
+      },
+      "id": "2691f697-4329-4872-9fb0-a88fe5a1aa58",
+      "name": "Magic 1 - Filtrage Fit des Donnees",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        672,
+        848
+      ]
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\"fit\":true,\"reason\":\"raison courte\",\"filtered_competences\":[\"competence 1\",\"competence 2\"]}"
+      },
+      "id": "5e3b968a-4529-450a-ac7a-57bfaba61350",
+      "name": "Fit Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        816,
+        1072
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.output.fit }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "7db748ae-c2cc-4e6a-8429-0278500bb6cf",
+      "name": "Fit Profile ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1024,
+        848
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Genere le Documentum Vitae (CV) en HTML pour ce candidat, cible sur cette offre. Competences filtrees pertinentes: {{ $json.output && $json.output.filtered_competences ? $json.output.filtered_competences : $json.output }}\n\nDonnees completes: {{ $('URL Offre + Donnees Perso + Competences').item.json.jsonOutput }}",
+        "options": {
+          "systemMessage": "Tu generes un CV (Documentum Vitae) compatible ATS: structure une seule colonne, sections standards (Experience, Education, Skills, Contact), texte factuel et sourced sans tournures generees par IA (evite \"oriente resultats\", \"force de proposition\"). Priorise les competences techniques transferables. Si un feedback de non-conformite est present dans les donnees d'entree, corrige le CV en consequence. Reponds uniquement avec le code HTML complet du CV."
+        }
+      },
+      "id": "13154cb7-7eb6-4fd2-ab1a-1593d42c6680",
+      "name": "Magic 2 - Generation DV V1",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1248,
+        592
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Verifie si ce CV HTML est compatible ATS ET correspond bien a l'offre cible.\n\nCV genere:\n{{ $json.output }}\n\nOffre cible: {{ $('URL Offre + Donnees Perso + Competences').item.json.jsonOutput }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "Tu verifies deux choses: 1) le CV respecte les regles ATS (une colonne, sections standards, pas de tableaux, texte factuel non-generique). 2) le contenu est coherent avec l'offre ciblee. Si l'une des deux conditions echoue, ats_compliant=false et donne un feedback precis et actionnable pour corriger et calcule un score de confiance pondéré par la fiabilité de chaque source (certified > documented > declarative), à l'image du score de confiance mentionné dans la méthode Documentum Vitae."
+        }
+      },
+      "id": "685defbe-d55d-4ca2-8a52-f977411d4c1d",
+      "name": "Magic 3 - Verification Fit DV avec URL",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1600,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\"ats_compliant\":true,\"feedback\":\"raison courte si non conforme\"}"
+      },
+      "id": "c4ae1e66-d634-417c-8ea5-924ff256b0d9",
+      "name": "ATS Compliance Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1744,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.output.ats_compliant }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "fac2892e-ce09-486f-92dd-eb8e5ab5bb94",
+      "name": "ATS Compliant ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1952,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cv-html",
+              "name": "dv_final_html",
+              "value": "={{ $('Magic 2 - Generation DV V1').item.json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "634e2ce7-d002-45ec-b019-69175f124408",
+      "name": "DV Final PDF",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2176,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "5f32f17c-4274-44e9-b073-1fcf8a068287",
+      "name": "DV Labelise",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2400,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "status",
+              "name": "status",
+              "value": "non_matching",
+              "type": "string"
+            },
+            {
+              "id": "reason",
+              "name": "reason",
+              "value": "={{ $json.output.reason }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "c59debb3-db35-4217-8dd5-ec34cc71519f",
+      "name": "Non Matching",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1312,
+        992
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.qrserver.com/v1/create-qr-code/",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "size",
+              "value": "300x300"
+            },
+            {
+              "name": "data",
+              "value": "=https://REPLACE_WITH_VERIFY_DOMAIN/verify/{{ $execution.id }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "3a5e7c90-c571-45dd-bb3a-22cba1ed39ea",
+      "name": "QR Code + Page de Labelisation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2176,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nstaticData.attempts = 0;\nreturn items;"
+      },
+      "id": "a295a32f-ac4b-4a83-bf9f-153764ae4bb5",
+      "name": "Init Compteur Tentatives",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        848
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nstaticData.attempts = (staticData.attempts || 0) + 1;\nreturn items.map(item => ({ json: { ...item.json, attempt: staticData.attempts } }));"
+      },
+      "id": "83c785cc-c937-46c7-b785-50d6c945513a",
+      "name": "Incrementer Tentative",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2176,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.attempt }}",
+              "operator": {
+                "operation": "lt",
+                "type": "number"
+              },
+              "rightValue": 3
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          }
+        },
+        "options": {}
+      },
+      "id": "169c4c42-c23d-4a1e-a5ad-9154f17df212",
+      "name": "Tentatives Max ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2400,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "status-echec",
+              "name": "status",
+              "type": "string",
+              "value": "echec_ats_max_tentatives"
+            },
+            {
+              "id": "last-feedback",
+              "name": "last_feedback",
+              "type": "string",
+              "value": "={{ $json.output ? $json.output.feedback : '' }}"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "7d0621df-79cb-4524-9ac0-929d4429a9ff",
+      "name": "Echec ATS - Max Tentatives",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2624,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "folder",
+        "operation": "getAll",
+        "bucketName": "MagicSystem",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        0,
+        112
+      ],
+      "id": "f7930232-c106-4da9-bfc8-b87a4ca35989",
+      "name": "Get many folders",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "bucketName": "MagicSystem",
+        "fileName": "=dv_{{ $execution.id }}.html",
+        "additionalFields": {},
+        "tagsUi": {
+          "tagsValues": [
+            {}
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        2624,
+        432
+      ],
+      "id": "627a9933-7d87-4af8-962a-64cb5bbd73a1",
+      "name": "Upload a file"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "cachedResultName": "gpt-5-mini",
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "3a2bbd49-259b-41cc-b720-8ffe6dd26db0",
+      "name": "OpenAI Model - Magic 1",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        688,
+        1072
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "cachedResultName": "gpt-5-mini",
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "1f5b66b8-0ab3-49d5-a9bc-66dd013d778f",
+      "name": "OpenAI Model - Magic 2",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1328,
+        816
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "cachedResultName": "gpt-5-mini",
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "e4d89a74-27cc-4363-bfdd-c1dcd2091b36",
+      "name": "OpenAI Model - Magic 3",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1616,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "formTitle": "DV Maker - Genere mon CV cible",
+        "formDescription": "Renseigne l'offre visee et tes sources de profil.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "URL de l'offre d'emploi",
+              "fieldName": "url_offre",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Lien GitHub",
+              "fieldName": "lien_github",
+              "placeholder": "https://github.com/tonpseudo"
+            },
+            {
+              "fieldLabel": "Lien LinkedIn",
+              "fieldName": "lien_linkedin",
+              "placeholder": "https://www.linkedin.com/in/tonprofil"
+            },
+            {
+              "fieldLabel": "Ton CV",
+              "fieldType": "file",
+              "fieldName": "cv_file",
+              "multipleFiles": false,
+              "acceptFileTypes": ".pdf,.docx",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e5484772-9cfe-4712-b2a6-6ec33969ccc2",
+      "name": "Formulaire Entree",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        -448,
+        848
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url_offre }}",
+        "options": {}
+      },
+      "id": "689d5867-9015-4938-840f-6f3c025e432d",
+      "name": "Recuperer Page Offre",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -224,
+        656
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "job_description",
+              "cssSelector": "body"
+            }
+          ]
+        },
+        "options": {
+          "trimValues": true
+        }
+      },
+      "id": "970884ce-40d3-41c1-bf65-05b4778c140f",
+      "name": "Extraire Texte Offre",
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        656
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "cv_file",
+        "options": {}
+      },
+      "id": "32ab55d4-8324-4c5a-a6c8-b7cbef4fa6eb",
+      "name": "Extraire Texte CV",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -224,
+        848
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const url = $('Formulaire Entree').first().json.lien_github || '';\nconst match = url.match(/github\\.com\\/(?:[^\\/]+\\/)?([A-Za-z0-9_-]+)\\/?/);\nconst username = match ? match[1] : '';\nreturn [{ json: { github_username: username } }];"
+      },
+      "id": "01691882-2ea9-4085-833c-4a2fb90d8cb9",
+      "name": "Extraire Username GitHub",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -224,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/users/{{ $json.github_username }}",
+        "options": {}
+      },
+      "id": "ce5db402-2c26-43f4-b36e-8a50d8144a01",
+      "name": "Recuperer Profil GitHub",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        0,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/users/{{ $('Extraire Username GitHub').item.json.github_username }}/repos?sort=updated&per_page=10",
+        "options": {}
+      },
+      "id": "3f4abf07-2a0b-4da1-8550-5fa0fcb003f8",
+      "name": "Recuperer Repos GitHub",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        224,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "numberInputs": 3,
+        "options": {}
+      },
+      "id": "d663b8dc-0e1d-461e-a713-a55d06debf58",
+      "name": "Fusion Sources",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        224,
+        848
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const form = $('Formulaire Entree').first().json;\nconst jobText = ($('Extraire Texte Offre').first().json.job_description || '').slice(0, 6000);\nconst cvText = ($('Extraire Texte CV').first().json.text || '').slice(0, 8000);\nlet githubSummary = '';\ntry {\n  const profile = $('Recuperer Profil GitHub').first().json;\n  const repos = $('Recuperer Repos GitHub').first().json;\n  const repoList = Array.isArray(repos) ? repos.map(r => `- ${r.name} (${r.language || 'n/a'}): ${r.description || ''}`).join('\\n') : '';\n  githubSummary = `Bio: ${profile.bio || ''}\\nDepots publics: ${profile.public_repos || 0}\\n${repoList}`;\n} catch (e) {\n  githubSummary = 'Non disponible';\n}\n\nconst profil = {\n  url_offre: form.url_offre,\n  job_offer_text: jobText,\n  donnees_perso: {\n    lien_linkedin: form.lien_linkedin || 'non fourni',\n    lien_github: form.lien_github || 'non fourni'\n  },\n  cv_brut: cvText,\n  github_resume: githubSummary\n};\n\nreturn [{ json: { jsonOutput: JSON.stringify(profil, null, 2) } }];"
+      },
+      "id": "c552df77-6b15-476c-a5d9-91065a04a2c1",
+      "name": "Assembler Profil",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        848
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Magic 1 - Filtrage Fit des Donnees": {
+      "main": [
+        [
+          {
+            "node": "Fit Profile ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fit Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Magic 1 - Filtrage Fit des Donnees",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fit Profile ?": {
+      "main": [
+        [
+          {
+            "node": "Magic 2 - Generation DV V1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Non Matching",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Magic 2 - Generation DV V1": {
+      "main": [
+        [
+          {
+            "node": "Magic 3 - Verification Fit DV avec URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Magic 3 - Verification Fit DV avec URL": {
+      "main": [
+        [
+          {
+            "node": "ATS Compliant ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ATS Compliance Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Magic 3 - Verification Fit DV avec URL",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ATS Compliant ?": {
+      "main": [
+        [
+          {
+            "node": "DV Final PDF",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "QR Code + Page de Labelisation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Incrementer Tentative",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DV Final PDF": {
+      "main": [
+        [
+          {
+            "node": "DV Labelise",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QR Code + Page de Labelisation": {
+      "main": [
+        [
+          {
+            "node": "DV Labelise",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Init Compteur Tentatives": {
+      "main": [
+        [
+          {
+            "node": "Magic 1 - Filtrage Fit des Donnees",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Incrementer Tentative": {
+      "main": [
+        [
+          {
+            "node": "Tentatives Max ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tentatives Max ?": {
+      "main": [
+        [
+          {
+            "node": "Magic 2 - Generation DV V1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Echec ATS - Max Tentatives",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DV Labelise": {
+      "main": [
+        [
+          {
+            "node": "Upload a file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Model - Magic 1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Magic 1 - Filtrage Fit des Donnees",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Model - Magic 2": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Magic 2 - Generation DV V1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Model - Magic 3": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Magic 3 - Verification Fit DV avec URL",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formulaire Entree": {
+      "main": [
+        [
+          {
+            "node": "Recuperer Page Offre",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Extraire Texte CV",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Extraire Username GitHub",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recuperer Page Offre": {
+      "main": [
+        [
+          {
+            "node": "Extraire Texte Offre",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraire Username GitHub": {
+      "main": [
+        [
+          {
+            "node": "Recuperer Profil GitHub",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recuperer Profil GitHub": {
+      "main": [
+        [
+          {
+            "node": "Recuperer Repos GitHub",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraire Texte Offre": {
+      "main": [
+        [
+          {
+            "node": "Fusion Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraire Texte CV": {
+      "main": [
+        [
+          {
+            "node": "Fusion Sources",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Recuperer Repos GitHub": {
+      "main": [
+        [
+          {
+            "node": "Fusion Sources",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Fusion Sources": {
+      "main": [
+        [
+          {
+            "node": "Assembler Profil",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assembler Profil": {
+      "main": [
+        [
+          {
+            "node": "Init Compteur Tentatives",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "nodeGroups": [],
+  "tags": [
+    {
+      "updatedAt": "2026-07-29T19:48:58.572Z",
+      "createdAt": "2026-07-29T19:48:58.572Z",
+      "name": "Magic System"
+    }
+  ]
+}

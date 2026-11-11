@@ -1,9 +1,8 @@
 # 🦁 DV Maker : pipeline n8n multi-agents pour des CV conformes ATS et vérifiables
 
 ![n8n](https://img.shields.io/badge/n8n-EA4B71?style=flat-square&logo=n8n&logoColor=white)
-![Claude](https://img.shields.io/badge/Claude-D97757?style=flat-square&logo=anthropic&logoColor=white)
-![Supabase](https://img.shields.io/badge/Supabase-3FCF8E?style=flat-square&logo=supabase&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)
+![OpenAI](https://img.shields.io/badge/GPT--5_mini-412991?style=flat-square&logo=openai&logoColor=white)
+![S3](https://img.shields.io/badge/Stockage-S3-569A31?style=flat-square&logo=amazons3&logoColor=white)
 ![Hackathon](https://img.shields.io/badge/Hackathon-Oreegami_×_Documentum_Vitae-0F766E?style=flat-square)
 
 > **Le défi :** générer, pour une offre d'emploi précise, un CV qui passe les filtres ATS des recruteurs, ne ressemble pas à un texte « écrit par une IA », et porte un **badge de confiance vérifiable**.
@@ -17,54 +16,58 @@ Documentum Vitae structure un profil professionnel autour de 5 piliers : **parco
 
 DV Maker part de ces données fiables et ne garde, pour chaque offre, que ce qui est pertinent et prouvé.
 
-## ⚙️ Le pipeline : 3 agents IA
+## ⚙️ Le pipeline
 
 ```
-Offre d'emploi (URL) + profil + compétences ESCO
+📝 Formulaire : URL de l'offre + CV (PDF) + GitHub + LinkedIn
+                │
+   ┌────────────┼──────────────────┐
+   ▼            ▼                  ▼
+ Page offre   Texte du CV     Profil + 10 derniers dépôts GitHub (API)
+   └────────────┼──────────────────┘
+                ▼
+        Assemblage du profil (JSON)
                 │
                 ▼
-   ✨ Magic 1 : score d'adéquation profil ↔ offre
+   ✨ Magic 1 : adéquation profil ↔ offre (mapping ESCO, proximité sémantique)
                 │
-        Profil adapté ? ── non ──► arrêt (non-matching)
+        Profil adapté ? ── non ──► arrêt « non_matching » + raison
                 │ oui
                 ▼
-   ✨ Magic 2 : génération du CV (Markdown → HTML)
+   ✨ Magic 2 : génération du CV ciblé en HTML
                 │
                 ▼
-   ✨ Magic 3 : audit de conformité ATS
+   ✨ Magic 3 : audit ATS + cohérence avec l'offre + score de confiance
                 │
-        Conforme ? ── non ──► retour à Magic 2 avec le feedback
-                │ oui            (3 tentatives maximum)
+        Conforme ? ── non ──► nouvelle génération avec le feedback (3 tentatives max)
+                │ oui                     └──► sinon arrêt « echec_ats_max_tentatives »
                 ▼
-   📄 CV final (PDF)  +  🔳 QR code ──► page publique de vérification
+   📄 CV final  +  🔳 QR code de vérification ──► stockage S3
 ```
 
-| Agent | Rôle | Sortie |
+| Agent | Rôle | Sortie structurée |
 |---|---|---|
-| **Magic 1** | Filtrer les compétences et mesurer l'adéquation à l'offre | `fit`, `reason`, `filtered_competences` |
-| **Magic 2** | Rédiger le CV ciblé à partir des seules données retenues | CV en Markdown puis HTML |
-| **Magic 3** | Vérifier la conformité ATS et l'alignement avec l'offre | `ats_compliant`, `feedback` |
+| **Magic 1** | Mapper les compétences sur ESCO et juger leur transférabilité vers le poste (raisonnement sémantique, pas de simple mot-clé) | `fit`, `reason`, `filtered_competences` |
+| **Magic 2** | Rédiger un CV une colonne, sections standards, factuel, sans formules creuses (« orienté résultats »…) | CV en HTML |
+| **Magic 3** | Vérifier les règles ATS et la cohérence avec l'offre ; pondérer la confiance selon la source (*certifiée* > *documentée* > *déclarative*) | `ats_compliant`, `feedback` |
 
 ## 🛡️ Choix de conception
 
-- **Boucle de correction bornée** : un compteur arrête le cycle Magic 2 ↔ Magic 3 après 3 échecs. Pas de boucle infinie en production, ni devant un jury.
-- **Traçabilité** : chaque CV est stocké dans Supabase Storage et lié à un QR code qui renvoie vers une page de vérification.
-- **Secrets hors du code** : clés API et identifiants remplacés par des variables `REPLACE_WITH_*`.
-- **Contournement d'un bug réel** : Supabase servait les fichiers HTML en `text/plain`. Corrigé en passant l'upload n8n en mode `raw` avec `Content-Type: text/html`, avec en filet de sécurité une page `viewer.html` qui récupère et affiche le contenu.
+- **Boucle de correction bornée** : un compteur arrête le cycle Magic 2 ↔ Magic 3 après 3 échecs, avec un statut d'échec explicite plutôt qu'une boucle infinie.
+- **Sources multiples recoupées** : le CV déclaré est confronté aux traces publiques (dépôts GitHub), ce qui fonde le score de confiance.
+- **Entrées tronquées** (6 000 caractères pour l'offre, 8 000 pour le CV) pour maîtriser le coût et la fenêtre de contexte.
+- **Aucun secret dans le dépôt** : identifiants et domaine de vérification à renseigner (`REPLACE_WITH_*`).
 
-## 🗄️ Modèle de données (Supabase)
+## 🚀 Utiliser le workflow
 
-`candidates` · `competences` · `proof_of_work` · `social_proof` · `job_offers` · `dv_exports` · `matching_logs`
+1. Dans n8n : **Import from file** → `n8n/dv_maker_workflow.json`
+2. Créer et brancher ses identifiants : **OpenAI** (3 nœuds « OpenAI Model ») et **S3** (bucket de stockage)
+3. Remplacer `REPLACE_WITH_VERIFY_DOMAIN` par le domaine de la page de vérification
+4. Activer le workflow, puis ouvrir l'URL du **formulaire d'entrée**
 
-## 🚀 Lancer en local
+## 🧭 Prochaine étape
 
-```bash
-cd docker
-cp .env.example .env      # renseigner identifiants et fuseau horaire
-docker compose up -d      # n8n sur http://localhost:5678
-```
-
-Ensuite, importer le workflow JSON dans n8n et brancher ses propres identifiants (Claude, Supabase, conversion PDF).
+Clarifier **ce que le QR code certifie** : le profil (diplômes, expériences vérifiés à la source) ou le document lui-même. C'est la différence entre un CV joli et un CV **digne de confiance**, et c'est tout l'enjeu contre les faux diplômes.
 
 ## 💡 Ce que ce projet montre
 
